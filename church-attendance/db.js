@@ -8,7 +8,14 @@ const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
 
-const DATA_FILE = path.join(__dirname, 'data', 'db.json');
+const DATA_DIR = path.join(__dirname, 'data');
+const DATA_FILE = path.join(DATA_DIR, 'db.json');
+
+// Make sure the data folder exists even if it wasn't uploaded/committed
+// (e.g. an empty folder dropped during a manual GitHub upload).
+if (!fs.existsSync(DATA_DIR)) {
+  fs.mkdirSync(DATA_DIR, { recursive: true });
+}
 
 function defaultData() {
   return {
