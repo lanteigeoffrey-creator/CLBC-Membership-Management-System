@@ -202,10 +202,14 @@ async function renderMembers() {
   const currentBranch = branches.find((b) => b.id === currentBranchId);
   main.innerHTML = `<div class="page-header">
       <div><h2>Members</h2><p>${currentBranch ? escapeHtml(currentBranch.name) : ''} — members, volunteers, and visitors.</p></div>
-      <button class="btn-brass" id="add-member-btn">+ Add member</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn-ghost" id="import-members-btn">Bulk import</button>
+        <button class="btn-brass" id="add-member-btn">+ Add member</button>
+      </div>
     </div>
     <div class="card"><div id="members-table"></div></div>`;
   document.getElementById('add-member-btn').addEventListener('click', () => openMemberModal());
+  document.getElementById('import-members-btn').addEventListener('click', () => openBulkImportModal());
   await loadMembersTable();
 }
 
@@ -293,6 +297,150 @@ async function deleteMember(id) {
     toast('Member removed');
     loadMembersTable();
   } catch (e) { toast(e.message, true); }
+}
+
+// ---------------- Bulk import (CSV) ----------------
+function parseCSV(text) {
+  // Minimal CSV parser: handles quoted fields, commas inside quotes, and CRLF/LF.
+  const rows = [];
+  let row = [];
+  let field = '';
+  let inQuotes = false;
+  const pushField = () => { row.push(field); field = ''; };
+  const pushRow = () => { pushField(); rows.push(row); row = []; };
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (inQuotes) {
+      if (c === '"') {
+        if (text[i + 1] === '"') { field += '"'; i++; } else { inQuotes = false; }
+      } else {
+        field += c;
+      }
+    } else if (c === '"') {
+      inQuotes = true;
+    } else if (c === ',') {
+      pushField();
+    } else if (c === '\n') {
+      pushRow();
+    } else if (c === '\r') {
+      // skip, \n handles the row break
+    } else {
+      field += c;
+    }
+  }
+  if (field.length || row.length) pushRow();
+  return rows.filter((r) => r.some((cell) => cell.trim() !== ''));
+}
+
+function csvRowsToMembers(rows) {
+  if (!rows.length) return [];
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const col = (names) => header.findIndex((h) => names.includes(h));
+  const idx = {
+    firstName: col(['first name', 'firstname', 'first']),
+    lastName: col(['last name', 'lastname', 'last']),
+    email: col(['email', 'email address']),
+    phone: col(['phone', 'phone number', 'mobile']),
+    group: col(['group', 'ministry', 'group / ministry']),
+    category: col(['category', 'type'])
+  };
+  return rows.slice(1).map((r) => ({
+    firstName: idx.firstName > -1 ? (r[idx.firstName] || '').trim() : '',
+    lastName: idx.lastName > -1 ? (r[idx.lastName] || '').trim() : '',
+    email: idx.email > -1 ? (r[idx.email] || '').trim() : '',
+    phone: idx.phone > -1 ? (r[idx.phone] || '').trim() : '',
+    group: idx.group > -1 ? (r[idx.group] || '').trim() : '',
+    category: idx.category > -1 ? (r[idx.category] || '').trim() : ''
+  }));
+}
+
+function downloadCSVTemplate() {
+  const csv = 'First Name,Last Name,Email,Phone,Group,Category\nAma,Boateng,ama@example.com,0244000000,Choir,Member\nKofi,Mensah,,0209000000,Youth,Volunteer\n';
+  const blob = new Blob([csv], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'member-import-template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function openBulkImportModal() {
+  const currentBranch = branches.find((b) => b.id === currentBranchId);
+  const backdrop = document.createElement('div');
+  backdrop.className = 'modal-backdrop';
+  backdrop.innerHTML = `
+    <div class="modal" style="width:520px;">
+      <h3>Bulk import members</h3>
+      <p style="font-size:13.5px; color:var(--ink-soft); margin-top:-8px;">
+        Importing into <strong>${currentBranch ? escapeHtml(currentBranch.name) : ''}</strong>.
+        Upload a CSV with columns: <span class="mono">First Name, Last Name, Email, Phone, Group, Category</span>.
+        Only First Name and Last Name are required.
+      </p>
+      <button class="btn-ghost btn-sm" id="download-template-btn" style="margin-bottom:14px;">Download CSV template</button>
+      <div class="field">
+        <label>CSV file</label>
+        <input type="file" id="bi-file" accept=".csv,text/csv" />
+      </div>
+      <div id="bi-preview"></div>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="bi-cancel">Cancel</button>
+        <button class="btn-brass" id="bi-import" disabled>Import</button>
+      </div>
+    </div>`;
+  document.body.appendChild(backdrop);
+  backdrop.querySelector('#bi-cancel').addEventListener('click', () => backdrop.remove());
+  backdrop.addEventListener('click', (e) => { if (e.target === backdrop) backdrop.remove(); });
+  backdrop.querySelector('#download-template-btn').addEventListener('click', downloadCSVTemplate);
+
+  let parsedMembers = [];
+  const importBtn = backdrop.querySelector('#bi-import');
+  const previewEl = backdrop.querySelector('#bi-preview');
+
+  backdrop.querySelector('#bi-file').addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rows = parseCSV(reader.result);
+      parsedMembers = csvRowsToMembers(rows).filter((m) => m.firstName || m.lastName);
+      const valid = parsedMembers.filter((m) => m.firstName && m.lastName);
+      const invalidCount = parsedMembers.length - valid.length;
+      if (!parsedMembers.length) {
+        previewEl.innerHTML = `<p style="color:var(--alert); font-size:13.5px;">No rows found — check the file has a header row and at least one data row.</p>`;
+        importBtn.disabled = true;
+        return;
+      }
+      previewEl.innerHTML = `
+        <p style="font-size:13.5px; margin-bottom:6px;"><strong>${valid.length}</strong> member${valid.length === 1 ? '' : 's'} ready to import${invalidCount ? `, <strong>${invalidCount}</strong> row(s) skipped (missing name)` : ''}.</p>
+        <div style="max-height:160px; overflow-y:auto; border:1px solid var(--line); border-radius:8px;">
+          <table style="font-size:12.5px;">
+            <thead><tr><th>Name</th><th>Group</th><th>Category</th></tr></thead>
+            <tbody>${valid.slice(0, 8).map((m) => `<tr><td>${escapeHtml(m.firstName)} ${escapeHtml(m.lastName)}</td><td>${escapeHtml(m.group || 'General')}</td><td>${escapeHtml(m.category || 'Member')}</td></tr>`).join('')}</tbody>
+          </table>
+        </div>
+        ${valid.length > 8 ? `<p style="font-size:12px; color:var(--ink-soft); margin-top:4px;">…and ${valid.length - 8} more.</p>` : ''}`;
+      importBtn.disabled = valid.length === 0;
+    };
+    reader.readAsText(file);
+  });
+
+  importBtn.addEventListener('click', async () => {
+    const valid = parsedMembers.filter((m) => m.firstName && m.lastName);
+    if (!valid.length) return;
+    importBtn.disabled = true;
+    importBtn.textContent = 'Importing…';
+    try {
+      const result = await api.post('/api/members/bulk', { branchId: currentBranchId, members: valid });
+      backdrop.remove();
+      toast(`Imported ${result.createdCount} member${result.createdCount === 1 ? '' : 's'}${result.skipped.length ? ` (${result.skipped.length} skipped)` : ''}`);
+      loadMembersTable();
+    } catch (e) {
+      toast(e.message, true);
+      importBtn.disabled = false;
+      importBtn.textContent = 'Import';
+    }
+  });
 }
 
 // ---------------- Sessions (Services) ----------------
