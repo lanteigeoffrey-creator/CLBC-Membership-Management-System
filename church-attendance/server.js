@@ -168,6 +168,46 @@ app.post('/api/members', requireAuth, (req, res) => {
   res.status(201).json(member);
 });
 
+// Bulk import — accepts { branchId, members: [{ firstName, lastName, email, phone, group, category }, ...] }
+app.post('/api/members/bulk', requireAuth, (req, res) => {
+  const { branchId, members } = req.body;
+  if (!Array.isArray(members) || !members.length) {
+    return res.status(400).json({ error: 'No members provided' });
+  }
+  const data = load();
+  const resolvedBranchId = branchId ? Number(branchId) : data.branches[0].id;
+  if (!data.branches.some((b) => b.id === resolvedBranchId)) {
+    return res.status(400).json({ error: 'Invalid branch' });
+  }
+  const created = [];
+  const skipped = [];
+  members.forEach((row, i) => {
+    const firstName = (row.firstName || '').trim();
+    const lastName = (row.lastName || '').trim();
+    if (!firstName || !lastName) {
+      skipped.push({ row: i + 1, reason: 'Missing first or last name' });
+      return;
+    }
+    const member = {
+      id: nextId(data, 'members'),
+      branchId: resolvedBranchId,
+      firstName,
+      lastName,
+      email: (row.email || '').trim(),
+      phone: (row.phone || '').trim(),
+      group: (row.group || '').trim() || 'General',
+      category: ['Member', 'Volunteer', 'Visitor'].includes(row.category) ? row.category : 'Member',
+      notes: '',
+      active: true,
+      createdAt: new Date().toISOString()
+    };
+    data.members.push(member);
+    created.push(member);
+  });
+  save(data);
+  res.status(201).json({ createdCount: created.length, skipped });
+});
+
 app.put('/api/members/:id', requireAuth, (req, res) => {
   const data = load();
   const member = data.members.find((m) => m.id === Number(req.params.id));
