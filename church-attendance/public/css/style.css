@@ -153,6 +153,7 @@ tr:hover td{background:rgba(169,120,46,0.04);}
   background:rgba(47,110,98,0.12); color:var(--teal);
 }
 .tag.visitor{background:rgba(169,120,46,0.14); color:var(--brass-deep);}
+.tag.pending{background:rgba(180,67,47,0.12); color:var(--alert);}
 .empty-state{padding:48px 20px; text-align:center; color:var(--ink-soft);}
 .empty-state .glyph{font-size:30px; margin-bottom:10px; opacity:.6;}
 
