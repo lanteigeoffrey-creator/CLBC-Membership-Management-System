@@ -140,47 +140,93 @@ app.get('/api/members', requireAuth, (req, res) => {
   res.json(members.sort((a, b) => a.firstName.localeCompare(b.firstName)));
 });
 
-app.post('/api/members', requireAuth, (req, res) => {
-  const { firstName, lastName, email, phone, group, category, notes, branchId } = req.body;
-  if (!firstName || !lastName) {
-    return res.status(400).json({ error: 'First and last name are required' });
-  }
-  const data = load();
-  const resolvedBranchId = branchId ? Number(branchId) : data.branches[0].id;
-  if (!data.branches.some((b) => b.id === resolvedBranchId)) {
-    return res.status(400).json({ error: 'Invalid branch' });
-  }
-  const member = {
-    id: nextId(data, 'members'),
+const MEMBER_CATEGORIES = ['Member', 'Volunteer', 'Visitor', 'Not Regularized'];
+
+function buildMemberRecord(data, row, resolvedBranchId, id) {
+  return {
+    id,
     branchId: resolvedBranchId,
-    firstName,
-    lastName,
-    email: email || '',
-    phone: phone || '',
-    group: group || 'General',
-    category: category || 'Member', // Member | Visitor | Volunteer
-    notes: notes || '',
+    firstName: (row.firstName || '').trim(),
+    lastName: (row.lastName || '').trim(),
+    email: (row.email || '').trim(),
+    phone: (row.phone || '').trim(),
+    group: (row.group || '').trim() || 'General',
+    category: MEMBER_CATEGORIES.includes(row.category) ? row.category : 'Member',
+    gender: (row.gender || '').trim(),
+    dateOfBirth: (row.dateOfBirth || '').trim(),
+    rhemaClass: (row.rhemaClass || '').trim(),
+    homeCell: (row.homeCell || '').trim(),
+    pictureUrl: (row.pictureUrl || '').trim(),
+    spiritualGifts: [row.spiritualGift1, row.spiritualGift2, row.spiritualGift3]
+      .map((g) => (g || '').trim())
+      .filter(Boolean),
+    notes: row.notes || '',
     active: true,
     createdAt: new Date().toISOString()
   };
+}
+
+// Fuzzy-ish branch lookup: matches on trimmed/case-insensitive equality first,
+// then falls back to a small edit-distance check to absorb minor typos
+// (e.g. "Liafe Cathedral" vs "Life Cathedral") before creating a new branch.
+function levenshtein(a, b) {
+  const dp = Array.from({ length: a.length + 1 }, (_, i) => [i, ...Array(b.length).fill(0)]);
+  for (let j = 0; j <= b.length; j++) dp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      dp[i][j] = a[i - 1] === b[j - 1]
+        ? dp[i - 1][j - 1]
+        : 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+    }
+  }
+  return dp[a.length][b.length];
+}
+
+function findOrCreateBranch(data, rawName) {
+  const name = (rawName || '').trim();
+  if (!name) return null;
+  const norm = name.toLowerCase();
+  let match = data.branches.find((b) => b.name.trim().toLowerCase() === norm);
+  if (!match) {
+    match = data.branches.find((b) => levenshtein(b.name.trim().toLowerCase(), norm) <= 2);
+  }
+  if (match) return match;
+  const branch = { id: nextId(data, 'branches'), name, location: '', createdAt: new Date().toISOString() };
+  data.branches.push(branch);
+  return branch;
+}
+
+app.post('/api/members', requireAuth, (req, res) => {
+  if (!req.body.firstName || !req.body.lastName) {
+    return res.status(400).json({ error: 'First and last name are required' });
+  }
+  const data = load();
+  const resolvedBranchId = req.body.branchId ? Number(req.body.branchId) : data.branches[0].id;
+  if (!data.branches.some((b) => b.id === resolvedBranchId)) {
+    return res.status(400).json({ error: 'Invalid branch' });
+  }
+  const member = buildMemberRecord(data, req.body, resolvedBranchId, nextId(data, 'members'));
   data.members.push(member);
   save(data);
   res.status(201).json(member);
 });
 
-// Bulk import — accepts { branchId, members: [{ firstName, lastName, email, phone, group, category }, ...] }
+// Bulk import — accepts { branchId, members: [{ firstName, lastName, ..., branchName? }, ...] }
+// If a row includes branchName (e.g. a "Chapel" column), it's routed to that branch,
+// creating it if it doesn't exist yet. Rows without one fall back to branchId.
 app.post('/api/members/bulk', requireAuth, (req, res) => {
   const { branchId, members } = req.body;
   if (!Array.isArray(members) || !members.length) {
     return res.status(400).json({ error: 'No members provided' });
   }
   const data = load();
-  const resolvedBranchId = branchId ? Number(branchId) : data.branches[0].id;
-  if (!data.branches.some((b) => b.id === resolvedBranchId)) {
+  const fallbackBranchId = branchId ? Number(branchId) : data.branches[0].id;
+  if (!data.branches.some((b) => b.id === fallbackBranchId)) {
     return res.status(400).json({ error: 'Invalid branch' });
   }
   const created = [];
   const skipped = [];
+  const branchesUsed = new Set();
   members.forEach((row, i) => {
     const firstName = (row.firstName || '').trim();
     const lastName = (row.lastName || '').trim();
@@ -188,24 +234,22 @@ app.post('/api/members/bulk', requireAuth, (req, res) => {
       skipped.push({ row: i + 1, reason: 'Missing first or last name' });
       return;
     }
-    const member = {
-      id: nextId(data, 'members'),
-      branchId: resolvedBranchId,
-      firstName,
-      lastName,
-      email: (row.email || '').trim(),
-      phone: (row.phone || '').trim(),
-      group: (row.group || '').trim() || 'General',
-      category: ['Member', 'Volunteer', 'Visitor'].includes(row.category) ? row.category : 'Member',
-      notes: '',
-      active: true,
-      createdAt: new Date().toISOString()
-    };
+    let resolvedBranchId = fallbackBranchId;
+    if (row.branchName && row.branchName.trim()) {
+      const branch = findOrCreateBranch(data, row.branchName);
+      if (branch) resolvedBranchId = branch.id;
+    }
+    branchesUsed.add(resolvedBranchId);
+    const member = buildMemberRecord(data, row, resolvedBranchId, nextId(data, 'members'));
     data.members.push(member);
     created.push(member);
   });
   save(data);
-  res.status(201).json({ createdCount: created.length, skipped });
+  res.status(201).json({
+    createdCount: created.length,
+    skipped,
+    branchesTouched: data.branches.filter((b) => branchesUsed.has(b.id)).map((b) => b.name)
+  });
 });
 
 app.put('/api/members/:id', requireAuth, (req, res) => {
