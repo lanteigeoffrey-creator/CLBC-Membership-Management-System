@@ -227,7 +227,7 @@ async function loadMembersTable() {
       <tr>
         <td><strong>${escapeHtml(m.firstName)} ${escapeHtml(m.lastName)}</strong></td>
         <td>${escapeHtml(m.group)}</td>
-        <td><span class="tag ${m.category === 'Visitor' ? 'visitor' : ''}">${escapeHtml(m.category)}</span></td>
+        <td><span class="tag ${m.category === 'Visitor' ? 'visitor' : ''} ${m.category === 'Not Regularized' ? 'pending' : ''}">${escapeHtml(m.category)}</span></td>
         <td>${escapeHtml(m.email || m.phone || '—')}</td>
         <td style="text-align:right;">
           <button class="btn-ghost btn-sm" onclick="openMemberModal(${m.id})">Edit</button>
@@ -243,24 +243,41 @@ async function openMemberModal(id) {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
-    <div class="modal">
+    <div class="modal" style="width:480px; max-height:85vh; overflow-y:auto;">
       <h3>${member ? 'Edit member' : 'Add member'}</h3>
       <div class="field-row">
         <div class="field"><label>First name</label><input id="m-first" value="${member ? escapeHtml(member.firstName) : ''}" /></div>
         <div class="field"><label>Last name</label><input id="m-last" value="${member ? escapeHtml(member.lastName) : ''}" /></div>
       </div>
       <div class="field"><label>Group / Ministry</label><input id="m-group" placeholder="e.g. Youth, Choir, General" value="${member ? escapeHtml(member.group) : ''}" /></div>
-      <div class="field"><label>Category</label>
-        <select id="m-category">
-          <option ${member?.category === 'Member' || !member ? 'selected' : ''}>Member</option>
-          <option ${member?.category === 'Volunteer' ? 'selected' : ''}>Volunteer</option>
-          <option ${member?.category === 'Visitor' ? 'selected' : ''}>Visitor</option>
-        </select>
+      <div class="field-row">
+        <div class="field"><label>Category</label>
+          <select id="m-category">
+            <option ${member?.category === 'Member' || !member ? 'selected' : ''}>Member</option>
+            <option ${member?.category === 'Volunteer' ? 'selected' : ''}>Volunteer</option>
+            <option ${member?.category === 'Visitor' ? 'selected' : ''}>Visitor</option>
+            <option ${member?.category === 'Not Regularized' ? 'selected' : ''}>Not Regularized</option>
+          </select>
+        </div>
+        <div class="field"><label>Gender</label>
+          <select id="m-gender">
+            <option value="" ${!member?.gender ? 'selected' : ''}>—</option>
+            <option ${member?.gender === 'Male' ? 'selected' : ''}>Male</option>
+            <option ${member?.gender === 'Female' ? 'selected' : ''}>Female</option>
+          </select>
+        </div>
       </div>
       <div class="field-row">
         <div class="field"><label>Email</label><input id="m-email" value="${member ? escapeHtml(member.email) : ''}" /></div>
         <div class="field"><label>Phone</label><input id="m-phone" value="${member ? escapeHtml(member.phone) : ''}" /></div>
       </div>
+      <div class="field-row">
+        <div class="field"><label>Date of birth</label><input id="m-dob" type="date" value="${member?.dateOfBirth || ''}" /></div>
+        <div class="field"><label>Home cell</label><input id="m-cell" value="${member ? escapeHtml(member.homeCell || '') : ''}" /></div>
+      </div>
+      <div class="field"><label>Rhema / discipleship class</label><input id="m-rhema" value="${member ? escapeHtml(member.rhemaClass || '') : ''}" /></div>
+      <div class="field"><label>Picture URL</label><input id="m-picture" placeholder="https://…" value="${member ? escapeHtml(member.pictureUrl || '') : ''}" /></div>
+      <div class="field"><label>Spiritual gifts (comma-separated)</label><input id="m-gifts" placeholder="e.g. Helps, Hospitality, Mercy" value="${member?.spiritualGifts ? escapeHtml(member.spiritualGifts.join(', ')) : ''}" /></div>
       <div class="modal-actions">
         <button class="btn-ghost" id="m-cancel">Cancel</button>
         <button class="btn-primary" id="m-save">${member ? 'Save changes' : 'Add member'}</button>
@@ -275,8 +292,14 @@ async function openMemberModal(id) {
       lastName: backdrop.querySelector('#m-last').value.trim(),
       group: backdrop.querySelector('#m-group').value.trim() || 'General',
       category: backdrop.querySelector('#m-category').value,
+      gender: backdrop.querySelector('#m-gender').value,
       email: backdrop.querySelector('#m-email').value.trim(),
       phone: backdrop.querySelector('#m-phone').value.trim(),
+      dateOfBirth: backdrop.querySelector('#m-dob').value,
+      homeCell: backdrop.querySelector('#m-cell').value.trim(),
+      rhemaClass: backdrop.querySelector('#m-rhema').value.trim(),
+      pictureUrl: backdrop.querySelector('#m-picture').value.trim(),
+      spiritualGifts: backdrop.querySelector('#m-gifts').value.split(',').map((g) => g.trim()).filter(Boolean),
       branchId: currentBranchId
     };
     if (!payload.firstName || !payload.lastName) { toast('First and last name are required', true); return; }
@@ -338,24 +361,43 @@ function csvRowsToMembers(rows) {
   const col = (names) => header.findIndex((h) => names.includes(h));
   const idx = {
     firstName: col(['first name', 'firstname', 'first']),
-    lastName: col(['last name', 'lastname', 'last']),
+    lastName: col(['last name', 'lastname', 'last', 'surname']),
     email: col(['email', 'email address']),
-    phone: col(['phone', 'phone number', 'mobile']),
-    group: col(['group', 'ministry', 'group / ministry']),
-    category: col(['category', 'type'])
+    phone: col(['phone', 'phone number', 'mobile', 'telephone number', 'telephone']),
+    group: col(['group', 'ministry', 'group / ministry', 'ministry or group']),
+    category: col(['category', 'type', 'membership status']),
+    branchName: col(['branch', 'chapel', 'campus']),
+    gender: col(['gender', 'sex']),
+    dateOfBirth: col(['date of birth', 'dob', 'birthday']),
+    rhemaClass: col(['rhema class', 'class']),
+    homeCell: col(['home cell', 'cell', 'small group']),
+    pictureUrl: col(['picture', 'picture url', 'photo']),
+    spiritualGift1: col(['spiritual gift 1']),
+    spiritualGift2: col(['spiritual gift 2']),
+    spiritualGift3: col(['spiritual gift 3'])
   };
+  const get = (r, key) => (idx[key] > -1 ? (r[idx[key]] || '').trim() : '');
   return rows.slice(1).map((r) => ({
-    firstName: idx.firstName > -1 ? (r[idx.firstName] || '').trim() : '',
-    lastName: idx.lastName > -1 ? (r[idx.lastName] || '').trim() : '',
-    email: idx.email > -1 ? (r[idx.email] || '').trim() : '',
-    phone: idx.phone > -1 ? (r[idx.phone] || '').trim() : '',
-    group: idx.group > -1 ? (r[idx.group] || '').trim() : '',
-    category: idx.category > -1 ? (r[idx.category] || '').trim() : ''
+    firstName: get(r, 'firstName'),
+    lastName: get(r, 'lastName'),
+    email: get(r, 'email'),
+    phone: get(r, 'phone'),
+    group: get(r, 'group'),
+    category: get(r, 'category'),
+    branchName: get(r, 'branchName'),
+    gender: get(r, 'gender'),
+    dateOfBirth: get(r, 'dateOfBirth'),
+    rhemaClass: get(r, 'rhemaClass'),
+    homeCell: get(r, 'homeCell'),
+    pictureUrl: get(r, 'pictureUrl'),
+    spiritualGift1: get(r, 'spiritualGift1'),
+    spiritualGift2: get(r, 'spiritualGift2'),
+    spiritualGift3: get(r, 'spiritualGift3')
   }));
 }
 
 function downloadCSVTemplate() {
-  const csv = 'First Name,Last Name,Email,Phone,Group,Category\nAma,Boateng,ama@example.com,0244000000,Choir,Member\nKofi,Mensah,,0209000000,Youth,Volunteer\n';
+  const csv = 'First Name,Last Name,Email,Phone,Group,Category,Chapel,Gender,Date of Birth,Rhema Class,Home Cell,Picture,Spiritual Gift 1,Spiritual Gift 2,Spiritual Gift 3\nAma,Boateng,ama@example.com,0244000000,Choir,Member,Life Cathedral - main service,Female,1990-05-14,Adult Class,Bethel Cell,,Helps,Hospitality,\nKofi,Mensah,,0209000000,Youth,Volunteer,Oasis - Youth Chapel,Male,,,,,\n';
   const blob = new Blob([csv], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
@@ -370,12 +412,18 @@ function openBulkImportModal() {
   const backdrop = document.createElement('div');
   backdrop.className = 'modal-backdrop';
   backdrop.innerHTML = `
-    <div class="modal" style="width:520px;">
+    <div class="modal" style="width:540px;">
       <h3>Bulk import members</h3>
       <p style="font-size:13.5px; color:var(--ink-soft); margin-top:-8px;">
-        Importing into <strong>${currentBranch ? escapeHtml(currentBranch.name) : ''}</strong>.
-        Upload a CSV with columns: <span class="mono">First Name, Last Name, Email, Phone, Group, Category</span>.
-        Only First Name and Last Name are required.
+        Upload a CSV. Only First Name and Last Name are required — everything else
+        (Email, Phone, Group, Category, Gender, Date of Birth, Rhema Class, Home Cell,
+        Picture, Spiritual Gifts) is optional.
+      </p>
+      <p style="font-size:13.5px; color:var(--ink-soft); margin-top:-4px;">
+        If your file has a <strong>Branch</strong> or <strong>Chapel</strong> column,
+        each row is routed to that branch automatically — new branches are created as
+        needed. Rows without one import into
+        <strong>${currentBranch ? escapeHtml(currentBranch.name) : 'the selected branch'}</strong>.
       </p>
       <button class="btn-ghost btn-sm" id="download-template-btn" style="margin-bottom:14px;">Download CSV template</button>
       <div class="field">
@@ -411,12 +459,14 @@ function openBulkImportModal() {
         importBtn.disabled = true;
         return;
       }
+      const branchNames = [...new Set(valid.map((m) => m.branchName).filter(Boolean))];
       previewEl.innerHTML = `
         <p style="font-size:13.5px; margin-bottom:6px;"><strong>${valid.length}</strong> member${valid.length === 1 ? '' : 's'} ready to import${invalidCount ? `, <strong>${invalidCount}</strong> row(s) skipped (missing name)` : ''}.</p>
+        ${branchNames.length ? `<p style="font-size:12.5px; color:var(--ink-soft); margin-bottom:6px;">Branches detected: ${branchNames.map((n) => escapeHtml(n)).join(', ')}</p>` : ''}
         <div style="max-height:160px; overflow-y:auto; border:1px solid var(--line); border-radius:8px;">
           <table style="font-size:12.5px;">
-            <thead><tr><th>Name</th><th>Group</th><th>Category</th></tr></thead>
-            <tbody>${valid.slice(0, 8).map((m) => `<tr><td>${escapeHtml(m.firstName)} ${escapeHtml(m.lastName)}</td><td>${escapeHtml(m.group || 'General')}</td><td>${escapeHtml(m.category || 'Member')}</td></tr>`).join('')}</tbody>
+            <thead><tr><th>Name</th><th>Branch</th><th>Category</th></tr></thead>
+            <tbody>${valid.slice(0, 8).map((m) => `<tr><td>${escapeHtml(m.firstName)} ${escapeHtml(m.lastName)}</td><td>${escapeHtml(m.branchName || (currentBranch ? currentBranch.name : ''))}</td><td>${escapeHtml(m.category || 'Member')}</td></tr>`).join('')}</tbody>
           </table>
         </div>
         ${valid.length > 8 ? `<p style="font-size:12px; color:var(--ink-soft); margin-top:4px;">…and ${valid.length - 8} more.</p>` : ''}`;
@@ -433,7 +483,11 @@ function openBulkImportModal() {
     try {
       const result = await api.post('/api/members/bulk', { branchId: currentBranchId, members: valid });
       backdrop.remove();
-      toast(`Imported ${result.createdCount} member${result.createdCount === 1 ? '' : 's'}${result.skipped.length ? ` (${result.skipped.length} skipped)` : ''}`);
+      const branchNote = result.branchesTouched && result.branchesTouched.length > 1
+        ? ` across ${result.branchesTouched.length} branches`
+        : '';
+      toast(`Imported ${result.createdCount} member${result.createdCount === 1 ? '' : 's'}${branchNote}${result.skipped.length ? ` (${result.skipped.length} skipped)` : ''}`);
+      await loadBranches();
       loadMembersTable();
     } catch (e) {
       toast(e.message, true);
