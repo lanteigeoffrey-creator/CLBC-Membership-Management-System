@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1" />
+<title>Check In — CLBC Registry</title>
+<link rel="icon" href="/assets/logo.png" />
+<link rel="stylesheet" href="/css/style.css" />
+<style>
+  body{ background:var(--parchment); }
+  .sc-wrap{ min-height:100vh; display:flex; flex-direction:column; align-items:center; padding:32px 20px 60px; }
+  .sc-logo{ width:56px; height:56px; object-fit:contain; margin-bottom:14px; }
+  .sc-card{ background:var(--white); border:1px solid var(--line); border-radius:16px; padding:28px 24px; width:100%; max-width:420px; box-shadow:var(--shadow); }
+  .sc-service{ text-align:center; margin-bottom:22px; }
+  .sc-service h1{ font-size:21px; margin:0 0 4px; }
+  .sc-service p{ color:var(--ink-soft); font-size:13.5px; margin:0; }
+  .sc-search input{ font-size:17px; padding:14px 16px; }
+  .sc-results{ margin-top:12px; }
+  .sc-row{
+    display:flex; align-items:center; justify-content:space-between; padding:14px 16px;
+    border:1px solid var(--line); border-radius:10px; margin-bottom:8px; background:var(--white);
+  }
+  .sc-row .who{ font-weight:600; font-size:15px; }
+  .sc-row .meta{ font-size:12px; color:var(--ink-soft); }
+  .sc-row button{ background:var(--teal); color:var(--white); flex-shrink:0; }
+  .sc-divider{ display:flex; align-items:center; gap:10px; margin:22px 0 16px; color:var(--ink-soft); font-size:12px; text-transform:uppercase; letter-spacing:.05em; }
+  .sc-divider::before, .sc-divider::after{ content:''; flex:1; height:1px; background:var(--line); }
+  .sc-visitor{ display:flex; gap:8px; }
+  .sc-visitor button{ background:var(--brass); color:var(--white); flex-shrink:0; }
+  .sc-confirm{ text-align:center; padding:20px 0; }
+  .sc-confirm .mark{ width:56px; height:56px; border-radius:50%; background:var(--teal); color:var(--white); display:flex; align-items:center; justify-content:center; font-size:28px; margin:0 auto 14px; }
+  .sc-confirm h2{ font-size:20px; margin:0 0 4px; }
+  .sc-confirm p{ color:var(--ink-soft); font-size:13.5px; margin:0; }
+  .sc-error{ text-align:center; color:var(--alert); padding:40px 0; }
+  .sc-checkin-another{ margin-top:20px; width:100%; }
+</style>
+</head>
+<body>
+<div class="sc-wrap">
+  <img src="/assets/logo.png" class="sc-logo" alt="CLBC" />
+  <div class="sc-card" id="sc-card">
+    <p style="text-align:center; color:var(--ink-soft);">Loading…</p>
+  </div>
+</div>
+<div id="toast-root"></div>
+<script src="/js/self-checkin.js"></script>
+</body>
+</html>

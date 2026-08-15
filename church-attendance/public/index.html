@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>CLBC Registry — Church Attendance</title>
+<link rel="icon" href="/assets/logo.png" />
+<link rel="stylesheet" href="/css/style.css" />
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+</head>
+<body>
+
+<div id="login-screen" class="login-screen" style="display:none;">
+  <div class="login-card">
+    <img src="/assets/logo.png" alt="Changed Life Baptist Church" class="login-logo" />
+    <h1>Registry</h1>
+    <p class="login-sub">Sign in to manage attendance and members.</p>
+    <div class="field">
+      <label>Username</label>
+      <input id="login-username" type="text" autocomplete="username" />
+    </div>
+    <div class="field">
+      <label>Password</label>
+      <input id="login-password" type="password" autocomplete="current-password" />
+    </div>
+    <button class="btn-primary" id="login-btn">Sign in</button>
+    <div class="login-error" id="login-error"></div>
+    <p class="login-hint">Default: <span class="mono">admin</span> / <span class="mono">admin123</span> — change this after first login.</p>
+  </div>
+</div>
+
+<div id="app-shell" class="app-shell" style="display:none;">
+  <div class="sidebar">
+    <div class="brand"><img src="/assets/logo.png" alt="CLBC" class="brand-mark" /> Registry</div>
+    <p class="brand-sub">Attendance &amp; Membership</p>
+
+    <div class="branch-switcher">
+      <label>Branch</label>
+      <select id="branch-select"></select>
+    </div>
+
+    <div class="nav-item active" data-page="dashboard">Dashboard</div>
+    <div class="nav-item" data-page="checkin">Check-in</div>
+    <div class="nav-item" data-page="sessions">Services</div>
+    <div class="nav-item" data-page="members">Members</div>
+    <div class="nav-item" data-page="branches">Branches</div>
+    <div class="sidebar-footer">
+      <div class="sidebar-user" id="sidebar-user"></div>
+      <button class="btn-ghost btn-sm" id="logout-btn" style="width:100%;">Sign out</button>
+    </div>
+  </div>
+
+  <div class="main" id="main"></div>
+</div>
+
+<div id="toast-root"></div>
+
+<script src="/js/app.js"></script>
+</body>
+</html>
